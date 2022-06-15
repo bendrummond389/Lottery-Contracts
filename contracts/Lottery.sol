@@ -13,15 +13,18 @@ contract Lottery is AccessControl {
     bytes32 private constant OWNER_ROLE = keccak256("OWNER");
     bytes32 private constant ADMIN_ROLE = keccak256("ADMIN");
 
+    // access control role variables
+    uint8 public adminCount = 0;
+
     // lottery constants
     uint public constant BASIS_POINTS = 500;
     IERC20 public token;
 
     // lottery variables
     uint256 private ticketPrice = 20e18;
-    uint256 public currentPool;
+    uint256 public currentPool = 0;
     uint256 private collectedFees;
-    address payable[] public players;
+    address payable[] public players; // does this need to be payable?
     uint public lastDraw;
 
     // Events
@@ -44,7 +47,7 @@ contract Lottery is AccessControl {
 
         // add player to the ticket array
         for (uint i = 0; i < ticketQuantity; i++) {
-            players.push(payable (msg.sender));
+            players.push(payable (msg.sender)); // does this need to be payable?
         }
     }
 
@@ -54,13 +57,13 @@ contract Lottery is AccessControl {
         collectedFees += fees;
     }
 
-    function getRandomNumber() public view returns (uint) {
+    function getRandomNumber() private view returns (uint) {
         return uint(keccak256(abi.encodePacked(address(this), block.timestamp)));
     }
 
-    function draw() public onlyRole(ADMIN_ROLE) {
+    function draw() public onlyAdminOrOwner {
         // ensure lottery hasn't been drawn in the past hour
-        require(block.timestamp >= (lastDraw + 300));
+        require(block.timestamp >= (lastDraw + 300), "The lottery can only be drawn every 5 minutes.");
 
         // winner player
         uint index = getRandomNumber() % players.length;
@@ -72,17 +75,20 @@ contract Lottery is AccessControl {
         emit Draw(winner, currentPool);
 
         // reset state of the contract
-        players = new address payable[](0);
+        players = new address payable[](0); // does this need to be payable?
         currentPool = 0;
         lastDraw = block.timestamp;
     }
 
     function addAdmin(address newAdmin) public onlyRole(OWNER_ROLE) {
+        require(adminCount <= 2, "There are already 2 admin accounts for this contract");
         grantRole(ADMIN_ROLE, newAdmin);
+        adminCount++;
     } 
 
     function removeAdmin(address removedAdmin) public onlyRole(OWNER_ROLE) {
         revokeRole(ADMIN_ROLE, removedAdmin);
+        adminCount--;
     } 
 
     function changeTicketPrice(uint newPrice) public onlyRole(OWNER_ROLE) {
@@ -98,5 +104,10 @@ contract Lottery is AccessControl {
         
         // reset the collected fees
         collectedFees = 0;
+    }
+
+    modifier onlyAdminOrOwner {
+        require (hasRole(OWNER_ROLE, msg.sender) || hasRole(ADMIN_ROLE, msg.sender));
+        _;
     }
 }
